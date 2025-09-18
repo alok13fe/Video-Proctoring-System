@@ -1,7 +1,8 @@
 'use client'
 import { useState } from 'react'
+import Link from 'next/link'
 import { useAppSelector } from '@/lib/hooks'
-import AuthContainer from './AuthContainer';
+import AuthContainer from './AuthContainer'
 
 export default function Navbar() {
 
@@ -14,7 +15,7 @@ export default function Navbar() {
       <nav className='py-3 border-b border-gray-300'>
         <div className='w-full container flex justify-between items-center'>
           <div>
-            <p className='text-xl font-bold'>Proctor</p>
+            <Link href='/' className='text-xl font-bold'>Proctor</Link>
           </div>
           <div className='hidden md:flex justify-between gap-10'>
             <p>Interviews</p>

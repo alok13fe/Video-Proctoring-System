@@ -12,3 +12,9 @@ export const loginSchema = z.object({
   password: z.string().min(6, {message: "Password must be at least 6 characters long"})
 });
 
+export const logSchema = z.object({
+  roomId: z.string(),
+  eventType: z.string(),
+  message: z.string(),
+  timestamp: z.number()
+});

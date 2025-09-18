@@ -1,9 +1,9 @@
 class PeerService {
-  public peer: RTCPeerConnection | null = null;
+  public peerConnection: RTCPeerConnection | null = null;
 
   constructor(){
-    if(!this.peer){
-      this.peer = new RTCPeerConnection({
+    if(!this.peerConnection){
+      this.peerConnection = new RTCPeerConnection({
         iceServers: [
           {
             urls: [
@@ -15,30 +15,39 @@ class PeerService {
       });
     }
   }
-  
+
   public async getOffer() {
-    if(this.peer){
-      const offer = await this.peer.createOffer();
-      await this.peer.setLocalDescription(new RTCSessionDescription(offer));
+    if(this.peerConnection){
+      const offer = await this.peerConnection.createOffer();
+      await this.peerConnection.setLocalDescription(offer);
       return offer;
     }
   }
 
   public async getAnswer(offer: RTCSessionDescriptionInit){
-    if(this.peer){
-      await this.peer.setRemoteDescription(offer);
-      const answer = await this.peer.createAnswer();
-      await this.peer.setLocalDescription(new RTCSessionDescription(answer));
+    if(this.peerConnection){
+      await this.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+
+      const answer = await this.peerConnection.createAnswer();
+      await this.peerConnection.setLocalDescription(answer);
 
       return answer;
     }
   }
 
-  public async setLocalDescription(answer: RTCSessionDescriptionInit){
-    if(this.peer){
-      await this.peer.setRemoteDescription(new RTCSessionDescription(answer));
+  public async setRemoteDescription(answer: RTCSessionDescriptionInit){
+    if(this.peerConnection){
+      await this.peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+    }
+  }
+
+  public closePeer() {
+    if (this.peerConnection) {
+      this.peerConnection.close();
+      this.peerConnection = null;
     }
   }
 }
 
-export default new PeerService();
+const peer = new PeerService();
+export default peer;

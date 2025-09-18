@@ -1,5 +1,5 @@
 'use client'
-import { useState} from 'react'
+import { useState, useEffect } from 'react'
 import Lobby from '@/components/Lobby'
 import MeetPreview from '@/components/MeetPreview';
 
@@ -10,6 +10,15 @@ export default function Room() {
   const [videoTrack, setVideoTrack] = useState<MediaStreamTrack | null>(null);
   const [audioTrack, setAudioTrack] = useState<MediaStreamTrack | null>(null);
   const [meetStarted, setMeetStarted] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (audioTrack && videoTrack) {
+        audioTrack.stop();
+        videoTrack.stop();
+      }
+    };
+  }, [audioTrack, videoTrack]);
 
   if(!meetStarted){
     return (

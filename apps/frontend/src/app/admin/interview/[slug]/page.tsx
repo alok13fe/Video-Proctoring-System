@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import AdminLobby from '@/components/AdminLobby'
 import AdminMeetPreview from '@/components/AdminMeetPreview';
 
@@ -10,6 +10,15 @@ export default function Interview() {
   const [videoTrack, setVideoTrack] = useState<MediaStreamTrack | null>(null);
   const [audioTrack, setAudioTrack] = useState<MediaStreamTrack | null>(null);
   const [meetStarted, setMeetStarted] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (audioTrack && videoTrack) {
+        audioTrack.stop();
+        videoTrack.stop();
+      }
+    };
+  }, [audioTrack, videoTrack]);
 
   if(!meetStarted){
     return (

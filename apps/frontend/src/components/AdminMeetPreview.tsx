@@ -1,9 +1,9 @@
 'use client'
 import { useState, useEffect, useRef, useCallback, SetStateAction } from 'react'
-import { useParams, useRouter } from 'next/navigation';
-import { useSocket } from '@/contexts/SocketProvider';
-import axios from 'axios';
-import peer from '@/services/peer';
+import { useParams, useRouter } from 'next/navigation'
+import { useSocket } from '@/contexts/SocketProvider'
+import axios from 'axios'
+import peer from '@/services/peer'
 
 interface AdminMeetPreviewProps{
   isMicOn: boolean;
@@ -38,26 +38,39 @@ export default function AdminMeetPreview({isMicOn, setIsMicOn, isCameraOn, setIs
   const [logs, setLogs] = useState<ILog[]>([]);
 
   const handleCallUser = useCallback(async() => {
-    if(!socket){
+    if(!socket || !audioTrack || !videoTrack){
       return;
     }
 
     const offer = await peer.getOffer();
-    socket.send(JSON.stringify({
-      type: 'outgoing-call',
-      payload: {
-        roomId: params.slug,
-        offer
-      }
-    }));
-  },[socket, params]);
+    
+    const localStream = new MediaStream([audioTrack, videoTrack]);
+    localStream.getTracks().forEach(track => {
+      peer.peerConnection?.addTrack(track, localStream);
+    })
+
+    setTimeout(() => {
+      socket.send(JSON.stringify({
+        type: 'outgoing-call',
+        payload: {
+          roomId: params.slug,
+          offer
+        }
+      }));
+    },500);
+  },[socket, params, audioTrack, videoTrack]);
 
   const handleIncomingCall = useCallback(async(offer: RTCSessionDescriptionInit) => {
-    if(!socket){
+    if(!socket || !audioTrack || !videoTrack){
       return;
     }
-
+    
+    const stream = new MediaStream([audioTrack, videoTrack]);
+    peer.peerConnection?.addTrack(videoTrack, stream);
+    peer.peerConnection?.addTrack(audioTrack, stream);
+    
     const answer = await peer.getAnswer(offer);
+    
     socket.send(JSON.stringify({
       type: 'call-accepted',
       payload: {
@@ -65,19 +78,11 @@ export default function AdminMeetPreview({isMicOn, setIsMicOn, isCameraOn, setIs
         answer
       }
     }));
-  },[socket, params]);
+  },[socket, params, videoTrack, audioTrack]);
 
-  const handleCallAccepted = useCallback((answer: RTCSessionDescriptionInit) => {
-    if(!audioTrack || !videoTrack){
-      return;
-    }
-    
-    const stream = new MediaStream([audioTrack, videoTrack]);
-
-    peer.setLocalDescription(answer);
-    peer.peer?.addTrack(videoTrack, stream);
-    peer.peer?.addTrack(audioTrack, stream);
-  },[videoTrack, audioTrack]);
+  const handleCallAccepted = useCallback(async (answer: RTCSessionDescriptionInit) => {
+    await peer.setRemoteDescription(answer);
+  },[]);
 
   const handleNegotiationNeeded = useCallback(async () => {
     if(!socket){
@@ -109,7 +114,35 @@ export default function AdminMeetPreview({isMicOn, setIsMicOn, isCameraOn, setIs
   },[socket, params]);
 
   const handleNegotiationFinal = useCallback(async (answer: RTCSessionDescriptionInit) => {
-    await peer.setLocalDescription(answer);
+    if (peer.peerConnection?.signalingState === "have-local-offer") {
+      try {
+        await peer.setRemoteDescription(new RTCSessionDescription(answer));
+      } catch (error) {
+        console.error("Failed to set remote description:", error);
+      }
+    } else {
+      console.warn("Received an answer in the wrong state:", peer.peerConnection?.signalingState);
+    }
+  },[]);
+
+  const handleIceCandidate = useCallback((event: RTCPeerConnectionIceEvent) => {
+    if(!socket){
+      return;
+    }
+
+    if (event.candidate) {
+      socket.send(JSON.stringify({
+        type: 'new-ice-candidate',
+        payload: {
+          roomId: params.slug,
+          iceCandidate: event.candidate
+        }
+      }));
+    }
+  },[socket, params]);
+
+  const handleNewIceCandidate = useCallback(async(iceCandidate: RTCIceCandidateInit) => {
+    await peer.peerConnection?.addIceCandidate(iceCandidate);
   },[]);
 
   const handleMessage = useCallback((event: MessageEvent) => {
@@ -117,7 +150,6 @@ export default function AdminMeetPreview({isMicOn, setIsMicOn, isCameraOn, setIs
     console.log(parsedData);
 
     if(parsedData.type === 'logs'){
-      console.log(parsedData.payload.message);
       setLogs(prev => [...prev, parsedData.payload]);
     }
     else if(parsedData.type === 'ask-to-join'){
@@ -131,6 +163,10 @@ export default function AdminMeetPreview({isMicOn, setIsMicOn, isCameraOn, setIs
     else if(parsedData.type === 'user-joined'){
       handleCallUser();
     }
+    else if(parsedData.type === 'user-left'){
+      peer.closePeer();
+      setRemoteStream(null);
+    }
     else if(parsedData.type === 'incoming-call'){
       handleIncomingCall(parsedData.payload.offer);
     }
@@ -143,7 +179,10 @@ export default function AdminMeetPreview({isMicOn, setIsMicOn, isCameraOn, setIs
     else if(parsedData.type === 'negotiation-final'){
       handleNegotiationFinal(parsedData.payload.answer);
     }
-  },[handleCallUser, handleIncomingCall, handleCallAccepted, handleIncomingNegotiation, handleNegotiationFinal]);
+    else if(parsedData.type === 'new-ice-candidate'){
+      handleNewIceCandidate(parsedData.payload.iceCandidate);
+    }
+  },[handleCallUser, handleIncomingCall, handleCallAccepted, handleIncomingNegotiation, handleNegotiationFinal, handleNewIceCandidate]);
   
   useEffect(() => {
     if (!socket) {
@@ -157,25 +196,40 @@ export default function AdminMeetPreview({isMicOn, setIsMicOn, isCameraOn, setIs
   },[socket, handleMessage]);
 
   useEffect(() => {
-    peer.peer?.addEventListener('track', async(ev) => {
-      const remoteStream = ev.streams;
-      console.log(remoteStream);
+    const handleTrackEvent = (event: RTCTrackEvent) => {
+      const remoteStream = event.streams;
+      console.log("Got remote stream", remoteStream[0]);
       setRemoteStream(remoteStream[0]);
-    });
+    };
+
+    const handleConnectionStateChange = (event: Event) => {
+      if (peer.peerConnection?.connectionState === 'connected') {
+        console.log('Peers Connected');
+      }
+    }
+    
+    peer.peerConnection?.addEventListener('track', handleTrackEvent);
+    peer.peerConnection?.addEventListener('connectionstatechange', handleConnectionStateChange);
     
     return () => {
-      peer.peer?.removeEventListener('track', async(ev) => {
-        const remoteStream = ev.streams;
-        setRemoteStream(remoteStream[0]);
-      });
-    }
-  },[]);
+      peer.peerConnection?.removeEventListener('track', handleTrackEvent);
+      peer.peerConnection?.removeEventListener('connectionstatechange', handleConnectionStateChange);
+    };
+  }, []);
 
   useEffect(() => {
-    peer.peer?.addEventListener('negotiationneeded', handleNegotiationNeeded);
+    peer.peerConnection?.addEventListener('icecandidate', handleIceCandidate);
     
     return () => {
-      peer.peer?.removeEventListener('negotiationneeded', handleNegotiationNeeded);
+      peer.peerConnection?.removeEventListener('icecandidate', handleIceCandidate);
+    };
+  }, [handleIceCandidate]);
+
+  useEffect(() => {
+    peer.peerConnection?.addEventListener('negotiationneeded', handleNegotiationNeeded);
+    
+    return () => {
+      peer.peerConnection?.removeEventListener('negotiationneeded', handleNegotiationNeeded);
     }
   },[handleNegotiationNeeded]);
   
@@ -185,6 +239,7 @@ export default function AdminMeetPreview({isMicOn, setIsMicOn, isCameraOn, setIs
       video.srcObject = remoteStream;
 
       video.onloadedmetadata = () => {
+        console.log('Playing Candidate Video');
         video.play();
       };
     }
@@ -227,26 +282,41 @@ export default function AdminMeetPreview({isMicOn, setIsMicOn, isCameraOn, setIs
     setIsCameraOn(curr => !curr);
   }
 
-  function handleLeaveRoom(){
+  async function handleFinshInterview(){
     if(!socket){
       return;
     }
 
-    socket.send(JSON.stringify({
-      type: 'leave-room',
-      payload: {
-        roomId: params.slug
-      }
-    }));
+    try {
+      await axios.patch(
+        `${process.env.NEXT_PUBLIC_BASE_URL}/room/finsh-interview`, 
+        {
+          roomId: params.slug
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('admin-token')}`
+          }
+        }
+      );
 
-    router.push('/admin');
+      socket.send(JSON.stringify({
+        type: 'leave-room',
+        payload: {
+          roomId: params.slug
+        }
+      }));
+      router.push('/admin');
+    } catch (error) {
+      console.log(error);
+    }
   }
 
   return (
     <main>
       <section className='w-full h-[calc(100vh-53px)] bg-gray-100'>
         <div className='p-5 md:p-10 container bg-white'>
-          <div className='pb-5 w-full flex gap-2'>
+          <div className='pb-5 w-full flex flex-col md:flex-row gap-2'>
             <div className='basis-2/3 p-5'>
               <p className='mb-2 text-2xl font-semibold'>Candidate</p>
               <div className='aspect-video bg-gray-100'>
@@ -254,6 +324,7 @@ export default function AdminMeetPreview({isMicOn, setIsMicOn, isCameraOn, setIs
                   ref={remoteVideoRef}
                   className={`w-full aspect-video ${remoteStream ? '' : 'hidden'} object-cover transform -scale-x-100`}
                   autoPlay
+                  playsInline
                   muted
                 />
               </div>
@@ -318,7 +389,7 @@ export default function AdminMeetPreview({isMicOn, setIsMicOn, isCameraOn, setIs
             </div>
             <div 
               className='h-10 w-10 bg-red-700 text-white flex items-center justify-center rounded-full'
-              onClick={handleLeaveRoom}
+              onClick={handleFinshInterview}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-phone-icon lucide-phone"><path d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384"/></svg>
             </div>

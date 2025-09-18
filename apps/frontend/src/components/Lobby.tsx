@@ -86,8 +86,8 @@ export default function Lobby({ isMicOn, setIsMicOn, isCameraOn, setIsCameraOn, 
     const handleMessage = (event: MessageEvent) => {
       const parsedData = JSON.parse(event.data);  
       if(parsedData.type === 'error'){
+        toast.error(parsedData.payload.message);
         console.log(parsedData.payload.message);
-        setError(parsedData.payload.message);
       }  
       else if(parsedData.type === 'join-success'){
         console.log(parsedData.payload.message);

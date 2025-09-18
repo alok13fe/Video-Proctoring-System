@@ -20,6 +20,7 @@ interface ILog {
   roomId: string;
   eventType: string;
   message: string;
+  timestamp: number;
 }
 
 export default function MeetPreview({ isMicOn, setIsMicOn, isCameraOn, setIsCameraOn, videoTrack, audioTrack }: MeetPreviewProps) {
@@ -40,31 +41,43 @@ export default function MeetPreview({ isMicOn, setIsMicOn, isCameraOn, setIsCame
   const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | null>(null);
   const [model, setModel] = useState<cocoSsd.ObjectDetection | null>(null);
 
-  const [remoteStream, setRemoteStream] = useState<MediaStream>();
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
 
-
   const handleCallUser = useCallback(async() => {
-    if(!socket){
+    if(!socket || !audioTrack || !videoTrack){
       return;
     }
 
     const offer = await peer.getOffer();
-    socket.send(JSON.stringify({
-      type: 'outgoing-call',
-      payload: {
-        roomId: params.slug,
-        offer
-      }
-    }));
-  },[socket, params]);
-  
+    
+    const localStream = new MediaStream([audioTrack, videoTrack]);
+    localStream.getTracks().forEach(track => {
+      peer.peerConnection?.addTrack(track, localStream);
+    })
+
+    setTimeout(() => {
+      socket.send(JSON.stringify({
+        type: 'outgoing-call',
+        payload: {
+          roomId: params.slug,
+          offer
+        }
+      }));
+    },500);
+  },[socket, params, audioTrack, videoTrack]);
+
   const handleIncomingCall = useCallback(async(offer: RTCSessionDescriptionInit) => {
-    if(!socket){
+    if(!socket || !audioTrack || !videoTrack){
       return;
     }
-
+    
+    const stream = new MediaStream([audioTrack, videoTrack]);
+    peer.peerConnection?.addTrack(videoTrack, stream);
+    peer.peerConnection?.addTrack(audioTrack, stream);
+    
     const answer = await peer.getAnswer(offer);
+    
     socket.send(JSON.stringify({
       type: 'call-accepted',
       payload: {
@@ -72,19 +85,11 @@ export default function MeetPreview({ isMicOn, setIsMicOn, isCameraOn, setIsCame
         answer
       }
     }));
-  },[socket, params]);
-  
-  const handleCallAccepted = useCallback((answer: RTCSessionDescriptionInit) => {
-    if(!audioTrack || !videoTrack){
-      return;
-    }
+  },[socket, params, videoTrack, audioTrack]);
 
-    const stream = new MediaStream([audioTrack, videoTrack]);
-
-    peer.setLocalDescription(answer);
-    peer.peer?.addTrack(videoTrack, stream);
-    peer.peer?.addTrack(audioTrack, stream);
-  },[videoTrack, audioTrack]);
+  const handleCallAccepted = useCallback(async (answer: RTCSessionDescriptionInit) => {
+    await peer.setRemoteDescription(answer);
+  },[]);
   
   const handleNegotiationNeeded = useCallback(async () => {
     if(!socket){
@@ -116,7 +121,35 @@ export default function MeetPreview({ isMicOn, setIsMicOn, isCameraOn, setIsCame
   },[socket, params]);
 
   const handleNegotiationFinal = useCallback(async (answer: RTCSessionDescriptionInit) => {
-    await peer.setLocalDescription(answer);
+    if (peer.peerConnection?.signalingState === "have-local-offer") {
+      try {
+        await peer.setRemoteDescription(new RTCSessionDescription(answer));
+      } catch (error) {
+        console.error("Failed to set remote description:", error);
+      }
+    } else {
+      console.warn("Received an answer in the wrong state:", peer.peerConnection?.signalingState);
+    }
+  },[]);
+
+  const handleIceCandidate = useCallback((event: RTCPeerConnectionIceEvent) => {
+    if(!socket){
+      return;
+    }
+
+    if (event.candidate) {
+      socket.send(JSON.stringify({
+        type: 'new-ice-candidate',
+        payload: {
+          roomId: params.slug,
+          iceCandidate: event.candidate
+        }
+      }));
+    }
+  },[socket, params]);
+
+  const handleNewIceCandidate = useCallback(async(iceCandidate: RTCIceCandidateInit) => {
+    await peer.peerConnection?.addIceCandidate(iceCandidate);
   },[]);
 
   const handleMessage = useCallback((event: MessageEvent) => {
@@ -125,6 +158,10 @@ export default function MeetPreview({ isMicOn, setIsMicOn, isCameraOn, setIsCame
     
     if(parsedData.type === 'user-joined'){
       handleCallUser();
+    }
+    else if(parsedData.type === 'user-left'){
+      peer.closePeer();
+      setRemoteStream(null);
     }
     else if(parsedData.type === 'incoming-call'){
       handleIncomingCall(parsedData.payload.offer);
@@ -138,7 +175,10 @@ export default function MeetPreview({ isMicOn, setIsMicOn, isCameraOn, setIsCame
     else if(parsedData.type === 'negotiation-final'){
       handleNegotiationFinal(parsedData.payload.answer);
     }
-  },[handleCallUser, handleIncomingCall, handleCallAccepted, handleIncomingNegotiation, handleNegotiationFinal]);
+    else if(parsedData.type === 'new-ice-candidate'){
+      handleNewIceCandidate(parsedData.payload.iceCandidate);
+    }
+  },[handleCallUser, handleIncomingCall, handleCallAccepted, handleIncomingNegotiation, handleNegotiationFinal, handleNewIceCandidate]);
 
   async function initialize(){
     if(!initializeRef.current){
@@ -223,12 +263,14 @@ export default function MeetPreview({ isMicOn, setIsMicOn, isCameraOn, setIsCame
       if(detections.length == 0){
         if(!fndRef.current){
           const timerId = setTimeout(() => {
-            console.log('No Face Detected');
-            sendLogs({
-              roomId: params.slug,
-              eventType: 'no_face_detected',
-              message: 'Face not detected for 10s.'
-            });
+            if(videoRef.current){
+              sendLogs({
+                roomId: params.slug,
+                eventType: 'no_face_detected',
+                message: 'Face not detected for 10s.',
+                timestamp: videoRef.current.currentTime
+              });
+            }
             fndRef.current = null;
           }, 10000);
 
@@ -248,12 +290,14 @@ export default function MeetPreview({ isMicOn, setIsMicOn, isCameraOn, setIsCame
       else if(detections.length > 1){
         if(!mtdRef.current){
           const timerId = setTimeout(() => {
-            console.log('Multiple Face Detected');
-            sendLogs({
-              roomId: params.slug,
-              eventType: 'multiple_face_detected',
-              message: 'Multiple faces detected.'
-            })
+            if(videoRef.current){
+              sendLogs({
+                roomId: params.slug,
+                eventType: 'multiple_face_detected',
+                message: 'Multiple faces detected.',
+                timestamp: videoRef.current.currentTime
+              })
+            }
             mtdRef.current = null;
           }, 500);
 
@@ -271,12 +315,14 @@ export default function MeetPreview({ isMicOn, setIsMicOn, isCameraOn, setIsCame
         if (gaze.direction === 'Left' || gaze.direction === 'Right') {
           if(!cnfRef.current){
             const timerId = setTimeout(() => {
-              console.log('Candidate not focused');
-              sendLogs({
-                roomId: params.slug,
-                eventType: 'candidate_not_focused',
-                message: 'Candidate not looking screen for more than 5 sec.'
-              })
+              if(videoRef.current){
+                sendLogs({
+                  roomId: params.slug,
+                  eventType: 'candidate_not_focused',
+                  message: 'Candidate not looking screen for more than 5 sec.',
+                  timestamp: videoRef.current.currentTime
+                })
+              }
               cnfRef.current = null;
             }, 5000);
 
@@ -295,20 +341,24 @@ export default function MeetPreview({ isMicOn, setIsMicOn, isCameraOn, setIsCame
       model.detect(videoRef.current).then(predictions => {
         predictions.map((obj) => {
           if(obj.class === 'cell phone' || obj.class === 'laptop' || obj.class === 'tv'){
-            console.log('Electronics Detected');
-            sendLogs({
-              roomId: params.slug,
-              eventType: 'electronics_detected',
-              message: `${obj.class} detected`
-            })
+            if(videoRef.current){
+              sendLogs({
+                roomId: params.slug,
+                eventType: 'electronics_detected',
+                message: `${obj.class} detected`,
+                timestamp: videoRef.current.currentTime
+              })
+            }
           }
           else if(obj.class === 'book'){
-            console.log('Book Detected');
-            sendLogs({
-              roomId: params.slug,
-              eventType: 'book_detected',
-              message: `${obj.class} detected`
-            })
+            if(videoRef.current){
+              sendLogs({
+                roomId: params.slug,
+                eventType: 'book_detected',
+                message: `${obj.class} detected`,
+                timestamp: videoRef.current.currentTime
+              })
+            }
           }
         })
       });
@@ -354,25 +404,40 @@ export default function MeetPreview({ isMicOn, setIsMicOn, isCameraOn, setIsCame
   },[socket, handleMessage]);
 
   useEffect(() => {
-    peer.peer?.addEventListener('track', async(ev) => {
-      const remoteStream = ev.streams;
-      console.log(remoteStream);
+    const handleTrackEvent = (event: RTCTrackEvent) => {
+      const remoteStream = event.streams;
+      console.log("Got remote stream", remoteStream[0]);
       setRemoteStream(remoteStream[0]);
-    });
+    };
+
+    const handleConnectionStateChange = (event: Event) => {
+      if (peer.peerConnection?.connectionState === 'connected') {
+          console.log('Peers Connected');
+      }
+    }
+
+    peer.peerConnection?.addEventListener('track', handleTrackEvent);
+    peer.peerConnection?.addEventListener('connectionstatechange', handleConnectionStateChange);
     
     return () => {
-      peer.peer?.removeEventListener('track', async(ev) => {
-        const remoteStream = ev.streams;
-        setRemoteStream(remoteStream[0]);
-      });
-    }
-  },[]);
+      peer.peerConnection?.removeEventListener('track', handleTrackEvent);
+      peer.peerConnection?.removeEventListener('connectionstatechange', handleConnectionStateChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    peer.peerConnection?.addEventListener('icecandidate', handleIceCandidate);
+    
+    return () => {
+      peer.peerConnection?.removeEventListener('icecandidate', handleIceCandidate);
+    };
+  }, [handleIceCandidate]);
   
   useEffect(() => {
-    peer.peer?.addEventListener('negotiationneeded', handleNegotiationNeeded);
+    peer.peerConnection?.addEventListener('negotiationneeded', handleNegotiationNeeded);
     
     return () => {
-      peer.peer?.removeEventListener('negotiationneeded', handleNegotiationNeeded);
+      peer.peerConnection?.removeEventListener('negotiationneeded', handleNegotiationNeeded);
     }
   },[handleNegotiationNeeded]);
 
@@ -381,8 +446,9 @@ export default function MeetPreview({ isMicOn, setIsMicOn, isCameraOn, setIsCame
     if (video && remoteStream) {
       video.srcObject = remoteStream;
 
-      video.onloadedmetadata = () => {
-        video.play();
+      video.onloadedmetadata = async () => {
+        console.log('Playing Interviewer Video');
+        await video.play();
       };
     }
   },[remoteStream]);
@@ -429,6 +495,7 @@ export default function MeetPreview({ isMicOn, setIsMicOn, isCameraOn, setIsCame
                   ref={videoRef}
                   className={`w-full ${isCameraOn? 'block': 'hidden'} aspect-video object-cover transform -scale-x-100`}
                   autoPlay
+                  playsInline
                   muted
                 />
               </div>

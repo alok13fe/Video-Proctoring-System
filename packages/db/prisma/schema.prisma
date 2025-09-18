@@ -19,35 +19,50 @@ enum Status {
 }
 
 model User {
-  id            Int            @id @default(autoincrement())
-  firstName     String
-  lastName      String
-  role          Role           @default(CANDIDATE)
-  email         String         @unique
-  password      String
-  createdAt     DateTime       @default(now())
-  rooms         Room[]
-  logs          Log[]
+  id               Int            @id @default(autoincrement())
+  firstName        String
+  lastName         String
+  role             Role           @default(CANDIDATE)
+  email            String         @unique
+  password         String
+  createdAt        DateTime       @default(now())
+  adminRooms       Room[]         @relation("AdminToRoom")
+  candidateRooms   Room[]         @relation("CandidateToRoom")
+  logs             Log[]
+  recordings       Recording[]
 }
 
 model Room {
-  id            Int            @id @default(autoincrement())
-  slug          String         @unique
-  adminId       Int
-  candidateId   Int?
-  logs          Log[]
-  status        Status         @default(ACTIVE)
-  createdAt     DateTime       @default(now())
-  admin         User           @relation(fields: [adminId], references: id)
+  id               Int            @id @default(autoincrement())
+  slug             String         @unique
+  adminId          Int
+  candidateId      Int?
+  logs             Log[]
+  recordings       Recording[]
+  status           Status         @default(ACTIVE)
+  startTime        DateTime?
+  endTime          DateTime?
+  admin            User           @relation("AdminToRoom", fields: [adminId], references: [id])
+  candidate        User?          @relation("CandidateToRoom", fields: [candidateId], references: [id])
 }
 
 model Log {
-  id            Int            @id @default(autoincrement())
-  roomId        Int
-  eventType     String
-  message       String
-  timestamp     DateTime
-  userId        Int
-  user          User           @relation(fields: [userId], references: id)
-  room          Room           @relation(fields: [roomId], references: id)
+  id               Int            @id @default(autoincrement())
+  roomId           Int
+  eventType        String
+  message          String
+  timestamp        Decimal
+  userId           Int
+  user             User           @relation(fields: [userId], references: id)
+  room             Room           @relation(fields: [roomId], references: id)
+}
+
+model Recording {
+  id               Int            @id @default(autoincrement())
+  roomId           Int
+  userId           Int
+  url              String
+  createdAt        DateTime       @default(now())
+  user             User           @relation(fields: [userId], references: id)
+  room             Room           @relation(fields: [roomId], references: id)
 }

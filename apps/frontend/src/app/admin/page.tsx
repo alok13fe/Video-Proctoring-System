@@ -3,20 +3,15 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppSelector } from '@/lib/hooks'
-import axios from 'axios';
-
-enum Status {
-  "ACTIVE",
-  "ONGOING",
-  "COMPLETED"
-}
+import axios from 'axios'
 
 interface Room {
-  id: number,
-  slug: string,
+  id: number;
+  slug: string;
   candidateId: number | null;
-  status: Status,
-  createdAt: string
+  status: string;
+  startTime?: string;
+  endTime?: string;
 }
 
 export default function AdminHome() {
@@ -122,8 +117,13 @@ export default function AdminHome() {
                           <td className='py-2'>{room.status}</td>
                           <td className='py-2'>
                             {
-                              room.status === Status.COMPLETED ?
-                              <button className='px-2 py-1 bg-gray-100 font-semibold border-gray-400 border rounded hover:bg-black hover:text-white'>View Report</button>
+                              room.status === "COMPLETED" ?
+                              <button 
+                                className='px-2 py-1 bg-gray-100 font-semibold border-gray-400 border rounded hover:bg-black hover:text-white'
+                                onClick={() => {router.push(`/admin/report?roomId=${room.slug}&candidateId=${room.candidateId}`)}}
+                              >
+                                View Report
+                              </button>
                               :
                               <button 
                                 className='px-2 py-1 bg-gray-100 font-semibold border-gray-400 border rounded hover:bg-black hover:text-white'
