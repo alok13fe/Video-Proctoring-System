@@ -66,13 +66,12 @@ The application is built on a microservices-oriented architecture, where each se
 ## **Overview**
 https://github.com/user-attachments/assets/aed6cebe-8e06-49f8-b317-994ea29a03f1
 
-
 ## **Getting Started**
 
 1. **Clone the repository:**  
    ```bash
-   git clone https://github.com/alok13fe/collaborative-canvas.git 
-   cd '.\Collaborative Canvas\'
+   git clone https://github.com/alok13fe/Video-Proctoring-System.git
+   cd '.\Video Proctoring System\'
    ```
 
 2. **Set up environment variables:**  
