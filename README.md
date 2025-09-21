@@ -19,11 +19,11 @@ The system features a monorepo architecture built with Turborepo and pnpm worksp
 
    * **Object Detection:** Identifies prohibited items like cell phones, laptops, and books in the camera frame.
 
-**Real-Time Event Logging:** All proctoring violations are logged with timestamps and sent to the interviewer's view in real-time.
+* **Real-Time Event Logging:** All proctoring violations are logged with timestamps and sent to the interviewer's view in real-time.
 
-**Scalable Architecture:** Decoupled services (HTTP, WebSocket, Worker) for handling API requests, real-time communication, and background processing efficiently.
+* **Scalable Architecture:** Decoupled services (HTTP, WebSocket, Worker) for handling API requests, real-time communication, and background processing efficiently.
 
-**Containerized:** Fully containerized with Docker and Docker Compose for easy setup and deployment.
+* **Containerized:** Fully containerized with Docker and Docker Compose for easy setup and deployment.
 
 ## **Tech Stack**
 **Monorepo:** Turborepo, pnpm
@@ -64,6 +64,7 @@ The application is built on a microservices-oriented architecture, where each se
 6. **PostgreSQL Database:** The primary data store for user information, interview rooms, and proctoring event logs, managed with Prisma ORM.
 
 ## **Overview**
+https://github.com/user-attachments/assets/aed6cebe-8e06-49f8-b317-994ea29a03f1
 
 
 ## **Getting Started**
