@@ -103,19 +103,6 @@ function MyDocument({ user, logs, startTime, endTime }: ReportProps) {
     }
   });
 
-  const formatTimestamp = (totalSeconds: number) => {
-    if (typeof totalSeconds !== 'number' || isNaN(totalSeconds)) {
-      return '00:00:00';
-    }
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = Math.floor(totalSeconds % 60);
-
-    const pad = (num: number) => num.toString().padStart(2, '0');
-
-    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-  };
-
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -148,7 +135,7 @@ function MyDocument({ user, logs, startTime, endTime }: ReportProps) {
             
             {logs && logs.map((log, index) => (
               <View key={index} style={styles.logTableRow} wrap={false}>
-                <Text style={styles.colTimestamp}>{formatTimestamp(log.timestamp)}</Text>
+                <Text style={styles.colTimestamp}>{log.timestamp}</Text>
                 <Text style={styles.colEvent}>{log.eventType}</Text>
                 <Text style={styles.colMessage}>{log.message}</Text>
               </View>

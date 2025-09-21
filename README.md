@@ -1,135 +1,94 @@
-# Turborepo starter
+# **Video Proctoring System**
 
-This Turborepo starter is maintained by the Turborepo core team.
+This project is a sophisticated, AI-driven platform for conducting secure and proctored online interviews. It leverages real-time video communication and browser-based machine learning to monitor candidates for potential malpractice, ensuring the integrity of remote assessments.
 
-## Using this example
+The system features a monorepo architecture built with Turborepo and pnpm workspaces, encapsulating a frontend, multiple backend services, and shared packages.
 
-Run the following command:
 
-```sh
-npx create-turbo@latest
-```
+## **Key Features**
 
-## What's inside?
+* **Admin Dashboard:** Admins can create interview rooms, manage candidates, and view detailed post-interview proctoring reports.
 
-This Turborepo includes the following packages/apps:
+* **Real-Time Video/Audio:** Low-latency, peer-to-peer video communication between the interviewer and candidate using WebRTC.
 
-### Apps and Packages
+* **AI-Powered Proctoring:**
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+   * **Face Detection:** Ensures only one person is present. Flags events for no face detected or multiple faces detected.
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+   * **Gaze Detection:** Monitors if the candidate is frequently looking away from the screen.
 
-### Utilities
+   * **Object Detection:** Identifies prohibited items like cell phones, laptops, and books in the camera frame.
 
-This Turborepo has some additional tools already setup for you:
+**Real-Time Event Logging:** All proctoring violations are logged with timestamps and sent to the interviewer's view in real-time.
 
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
+**Scalable Architecture:** Decoupled services (HTTP, WebSocket, Worker) for handling API requests, real-time communication, and background processing efficiently.
 
-### Build
+**Containerized:** Fully containerized with Docker and Docker Compose for easy setup and deployment.
 
-To build all apps and packages, run the following command:
+## **Tech Stack**
+**Monorepo:** Turborepo, pnpm
 
-```
-cd my-turborepo
+* **Frontend:** Next.js, React, TypeScript, Redux Toolkit, Tailwind CSS
 
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build
+* **Backend:** Node.js, Express.js (HTTP), ws (WebSocket), TypeScript
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
-```
+* **Database:** PostgreSQL, Prisma (ORM)
 
-You can build a specific package by using a [filter](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters):
+* **AI / Machine Learning (Client-Side):**
 
-```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build --filter=docs
+   * MediaPipe (@mediapipe/tasks-vision) for Face Detection & Gaze Tracking.
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-```
+   * TensorFlow.js (@tensorflow-models/coco-ssd) for Object Detection.
 
-### Develop
+* **Real-Time Communication:** WebRTC
 
-To develop all apps and packages, run the following command:
+* **Messaging Queue:** Redis
 
-```
-cd my-turborepo
+* **Containerization:** Docker, Docker Compose
 
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev
+* **Shared Packages:** Zod (Schema Validation), ESLint, TypeScript configs
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
-```
+## **Architecture**
+The application is built on a microservices-oriented architecture, where each service has a distinct responsibility.
 
-You can develop a specific package by using a [filter](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters):
+1. **Frontend:** A Next.js application that provides the UI for both admins and candidates. It handles capturing video, running ML models in the browser, and communicating with the backend services.
 
-```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev --filter=web
+2. **HTTP Backend:** An Express.js server that manages RESTful API endpoints for user authentication, room creation, and persisting proctoring logs to the database.
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
+3. **WebSocket Backend:** Handles all real-time signaling required for WebRTC (offers, answers, ICE candidates) and receives proctoring logs from the frontend client.
 
-### Remote Caching
+4. **Redis:** Acts as a high-speed message broker. The WebSocket server pushes incoming logs to a Redis queue to avoid blocking.
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+5. **Worker:** A background service that listens to the Redis queue, dequeues log messages, and sends them to the HTTP Backend to be saved in the PostgreSQL database.
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+6. **PostgreSQL Database:** The primary data store for user information, interview rooms, and proctoring event logs, managed with Prisma ORM.
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+## **Overview**
 
-```
-cd my-turborepo
 
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo login
+## **Getting Started**
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
-```
+1. **Clone the repository:**  
+   ```bash
+   git clone https://github.com/alok13fe/collaborative-canvas.git 
+   cd '.\Collaborative Canvas\'
+   ```
 
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+2. **Set up environment variables:**  
+   ```bash
+   cp .env.example .env
+   ```
 
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
+   *Fill in the .env file with your database credentials, JWT secret, and other necessary variables.*  
 
-```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo link
+3. **Run the Docker containers:**  
+   ```bash 
+   docker-compose up  
+   ```
+   
+Open http://localhost:3000 in your browser to view the project.
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
-```
+## **Contact**
+For queries or feedback, please contact [Alok](mailto:anandkumar19d@gmail.com).
 
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.com/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.com/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.com/docs/reference/configuration)
-- [CLI Usage](https://turborepo.com/docs/reference/command-line-reference)
+---

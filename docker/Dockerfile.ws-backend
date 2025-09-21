@@ -1,0 +1,24 @@
+FROM node:22-alpine
+
+WORKDIR /app
+
+ARG DATABASE_URL
+ENV DATABASE_URL=$DATABASE_URL
+
+COPY ./packages ./packages
+COPY ./apps/ws-backend ./apps/ws-backend
+
+COPY ./package.json ./package.json
+COPY ./turbo.json ./turbo.json
+COPY ./pnpm-lock.yaml ./pnpm-lock.yaml
+COPY ./pnpm-workspace.yaml ./pnpm-workspace.yaml
+
+RUN npm install -g pnpm
+RUN pnpm install
+
+RUN pnpm run db:generate
+RUN pnpm build
+
+EXPOSE 1234
+
+CMD ["pnpm", "run", "start:ws-backend"]

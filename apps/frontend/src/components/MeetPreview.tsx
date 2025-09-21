@@ -383,7 +383,7 @@ export default function MeetPreview({ isMicOn, setIsMicOn, isCameraOn, setIsCame
 
       video.onloadedmetadata = () => {
         video.play();
-        // mediaRecorder.start();
+        // mediaRecorder.sptart();
       };
 
       return(() => {
